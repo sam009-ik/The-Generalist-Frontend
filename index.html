@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>The Generalist — Workbench</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light only" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="lockup">TG</div>
+      <div class="title">The Generalist</div>
+    </div>
+    <div class="subtle">Analyst’s Workbench</div>
+  </header>
+
+  <main class="layout">
+    <!-- Intake Panel -->
+    <section class="panel intake" aria-label="Input">
+      <h2>Compose Brief</h2>
+      <label class="field">
+        <span>Objective</span>
+        <textarea id="brief" rows="6" placeholder="e.g., Analyze sales trends by region and produce one plot + a short executive summary."></textarea>
+      </label>
+
+      <label class="field">
+        <span>URLs (one per line, optional)</span>
+        <textarea id="urls" rows="3" placeholder="https://example.com/page-1
+https://example.com/page-2"></textarea>
+      </label>
+
+      <div class="field">
+        <span>Data files (optional)</span>
+        <div id="dropzone" class="dropzone" tabindex="0">
+          <input id="fileInput" type="file" multiple hidden />
+          <div class="dz-invite">
+            <div class="dz-icon">⇪</div>
+            <div>Drag & drop files here or <button id="browseBtn" type="button" class="link">browse</button></div>
+            <div class="dz-note">CSV, XLSX, JSON, Parquet, PDF, HTML, ZIP/TAR.GZ…</div>
+          </div>
+          <ul id="fileList" class="file-list"></ul>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="runBtn" class="primary">Run Analysis</button>
+        <span id="status" class="status"></span>
+      </div>
+    </section>
+
+    <!-- Results Panel -->
+    <section class="panel results" aria-label="Results">
+      <h2>Results</h2>
+      <div id="results"></div>
+    </section>
+
+    <!-- Provenance Panel -->
+    <aside class="panel provenance" aria-label="Provenance">
+      <h2>Provenance</h2>
+      <div id="provenance"></div>
+    </aside>
+  </main>
+
+  <footer class="foot">
+    <span>© The Generalist</span>
+    <span class="muted">Minimal beige UI • No chat bubbles • Reproducible runs</span>
+  </footer>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
