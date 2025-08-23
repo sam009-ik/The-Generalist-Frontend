@@ -50,7 +50,10 @@ textarea{
 }
 .dropzone{
   border:1.5px dashed var(--line); border-radius:14px; background:#fff;
-  padding:14px; outline:none
+  padding:14px; outline:none;
+  min-height:120px;               /* bigger target */
+  display:flex; flex-direction:column; justify-content:center; align-items:center;
+  cursor:copy;
 }
 .dropzone:focus{border-color:#CBBDAE}
 .dz-invite{display:grid; place-items:center; gap:6px; color:var(--muted); padding:10px}
@@ -78,7 +81,18 @@ textarea{
 }
 .card h3{margin:0 0 8px; font-size:16px}
 .card pre{
-  background:#FCFBF8;border:1px solid var(--line); padding:10px;border-radius:10px; overflow:auto
+  background:#FCFBF8;
+  border:1px solid var(--line);
+  padding:10px;
+  border-radius:10px;
+  /* NEW: wrap long content instead of horizontal scroll */
+  white-space:pre-wrap;      /* respect newlines, but allow wrapping */
+  word-break:break-word;     /* break long tokens (e.g., base64) */
+  overflow-x:hidden;         /* no horizontal scroll bar */
+}
+.text{
+  white-space:pre-wrap;
+  line-height:1.5;
 }
 .card img{max-width:100%; border-radius:10px; border:1px solid var(--line); background:#fff}
 

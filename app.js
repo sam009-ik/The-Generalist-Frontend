@@ -1,9 +1,10 @@
-// ========= CONFIG =========
+// ========= CONFIG (matches your backend) =========
 const API_BASE = "https://the-generalist-data-analyst-agent.onrender.com";
-const API_PATH = "/api/"; // adjust if your path differs
-// If your backend uses different field names, change here:
-const FORM_KEYS = { brief: "brief", file: "files", urls: "urls" };
-// ==========================
+const API_PATH = "/api/"; // IMPORTANT: trailing slash required
+// Your backend requires a file named exactly "questions.txt"
+const QUESTION_FILE_FIELD = "questions.txt";
+const OTHER_FILES_FIELD = "files"; // can be any name that's not "questions.txt"
+// =================================================
 
 const els = {
   brief: document.getElementById("brief"),
@@ -30,7 +31,6 @@ els.fileInput.addEventListener("change", () => {
   for (const f of els.fileInput.files) files.push(f);
   refreshFileList();
 });
-
 ["dragenter", "dragover"].forEach(evt =>
   els.dropzone.addEventListener(evt, e => {
     e.preventDefault();
@@ -51,7 +51,6 @@ els.dropzone.addEventListener("drop", e => {
   refreshFileList();
 });
 
-// Render file list
 function refreshFileList() {
   els.fileList.innerHTML = "";
   files.forEach((f, idx) => {
@@ -65,7 +64,6 @@ function refreshFileList() {
     els.fileList.appendChild(li);
   });
 }
-
 function prettyBytes(n){
   if(n<1024) return `${n} B`;
   const u=["KB","MB","GB","TB"];
@@ -73,16 +71,27 @@ function prettyBytes(n){
   return `${n.toFixed(1)} ${u[i]}`;
 }
 
-// Submit handler
 els.runBtn.addEventListener("click", async () => {
-  const brief = els.brief.value.trim();
-  const urlsRaw = els.urls.value.trim();
-  const urls = urlsRaw ? urlsRaw.split(/\r?\n/).map(s => s.trim()).filter(Boolean) : [];
+  const brief = (els.brief.value || "").trim();
+  const urlsRaw = (els.urls.value || "").trim();
 
-  if (!brief && files.length === 0 && urls.length === 0) {
-    setStatus("Please add a brief, a file, or a URL.");
+  if (!brief && files.length === 0 && !urlsRaw) {
+    setStatus("Please enter a brief, or add files/URLs.");
     return;
   }
+
+  // Build questions.txt content (your backend extracts URLs from this text)
+  const urlLines = urlsRaw
+    ? urlsRaw.split(/\r?\n/).map(s => s.trim()).filter(Boolean)
+    : [];
+  const questionsText = [
+    brief || "",
+    ...(urlLines.length ? ["", ...urlLines] : [])
+  ].join("\n");
+
+  // Create a text file Blob for questions.txt
+  const questionsBlob = new Blob([questionsText], { type: "text/plain" });
+  const questionsFile = new File([questionsBlob], "questions.txt", { type: "text/plain" });
 
   els.runBtn.disabled = true;
   setStatus("Submitting…", true);
@@ -91,22 +100,25 @@ els.runBtn.addEventListener("click", async () => {
 
   try {
     const fd = new FormData();
-    if (brief) fd.append(FORM_KEYS.brief, brief);
-    if (urls.length) fd.append(FORM_KEYS.urls, JSON.stringify(urls));
-    for (const f of files) fd.append(FORM_KEYS.file, f, f.name);
+    // REQUIRED by your backend:
+    fd.append(QUESTION_FILE_FIELD, questionsFile, "questions.txt");
 
-    const res = await fetch(`${API_BASE}${API_PATH}?debug=0`, {
+    // Optional: any other files (key name can be anything ≠ "questions.txt")
+    for (const f of files) fd.append(OTHER_FILES_FIELD, f, f.name);
+
+    const res = await fetch(`${API_BASE}${API_PATH}`, {
       method: "POST",
       body: fd,
     });
 
+    // Handle non-2xx
     if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`HTTP ${res.status}: ${errText}`);
+      const errText = await res.text().catch(()=> "");
+      throw new Error(`HTTP ${res.status}${errText ? `: ${errText}` : ""}`);
     }
+
     const data = await res.json();
     setStatus("Done.");
-
     renderResponse(data);
   } catch (err) {
     console.error(err);
@@ -117,27 +129,31 @@ els.runBtn.addEventListener("click", async () => {
   }
 });
 
-// Render response (robust to different shapes)
 function renderResponse(payload) {
-  // Provenance first if present
-  const prov = payload.provenance || payload.materials || payload.sources || null;
-  if (prov) {
-    pushCard(els.provenance, "Materials", `<pre>${escapeHTML(JSON.stringify(prov, null, 2))}</pre>`);
+  // If the backend returned an execution error, surface it clearly
+  if (payload && (payload.error || payload.details || payload.stderr)) {
+    let msg = "";
+    if (payload.error)   msg += `Error: ${payload.error}\n\n`;
+    if (payload.details) msg += `Traceback:\n${payload.details}\n\n`;
+    if (payload.stdout)  msg += `STDOUT:\n${payload.stdout}\n\n`;
+    if (payload.stderr)  msg += `STDERR:\n${payload.stderr}\n\n`;
+    pushCard(els.results, "Execution Error", `<pre>${escapeHTML(msg.trim())}</pre>`);
+    return;
   }
 
-  // Known common fields
+  // General text fields
   if (payload.answer || payload.summary || payload.explanation) {
     const txt = payload.answer || payload.summary || payload.explanation;
     pushCard(els.results, "Findings", `<div>${linkify(escapeHTML(String(txt)))}</div>`);
   }
 
-  // Answers list
+  // Answers array
   if (Array.isArray(payload.answers)) {
     const html = payload.answers.map(a => `<li>${escapeHTML(String(a))}</li>`).join("");
     pushCard(els.results, "Findings", `<ul>${html}</ul>`);
   }
 
-  // Tables (array of arrays or array of objects)
+  // Tables
   const tables = payload.tables || payload.table || null;
   if (tables) {
     const arr = Array.isArray(tables) ? tables : [tables];
@@ -149,20 +165,28 @@ function renderResponse(payload) {
   if (imgs) {
     const list = Array.isArray(imgs) ? imgs : [imgs];
     const html = list.map(src => {
-      if (typeof src === "string") return `<img alt="figure" src="${src.startsWith("data:") || src.startsWith("http") ? src : `data:image/png;base64,${src}`}" />`;
+      if (typeof src === "string") {
+        return `<img alt="figure" src="${src.startsWith("data:") || src.startsWith("http") ? src : `data:image/png;base64,${src}`}" />`;
+      }
       if (src && src.base64) return `<img alt="figure" src="data:image/png;base64,${src.base64}"/>`;
       return "";
     }).join("");
     if (html.trim()) pushCard(els.results, "Visuals", html);
   }
 
-  // SQL / Codelets
+  // Code or SQL echoes
   const code = payload.code || payload.sql || payload.codelets || null;
   if (code) {
     pushCard(els.results, "Code", `<pre>${escapeHTML(typeof code === "string" ? code : JSON.stringify(code, null, 2))}</pre>`);
   }
 
-  // If nothing matched, show raw
+  // Provenance-ish fields if your model returns them
+  const prov = payload.provenance || payload.materials || payload.sources || null;
+  if (prov) {
+    pushCard(els.provenance, "Materials", `<pre>${escapeHTML(JSON.stringify(prov, null, 2))}</pre>`);
+  }
+
+  // If nothing matched, show the raw response
   if (els.results.innerHTML.trim() === "") {
     pushCard(els.results, "Raw Response", `<pre>${escapeHTML(JSON.stringify(payload, null, 2))}</pre>`);
   }
@@ -176,7 +200,6 @@ function pushCard(container, title, innerHTML) {
 }
 
 function pushTable(data, title="Table") {
-  // Accepts array of objects OR {columns:[...], data:[[...]]} OR array of arrays
   let headers = [];
   let rows = [];
 
@@ -190,7 +213,6 @@ function pushTable(data, title="Table") {
     headers = data[0].map((_, i) => `col_${i+1}`);
     rows = data;
   } else {
-    // fallback
     pushCard(els.results, title, `<pre>${escapeHTML(JSON.stringify(data, null, 2))}</pre>`);
     return;
   }
